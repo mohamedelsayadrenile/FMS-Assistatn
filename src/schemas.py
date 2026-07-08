@@ -14,6 +14,7 @@ class ChatContext(BaseModel):
     jwt: str
     company_id: str
     manager_ids: list[str]
+    request_id: str
 
 
 class ChatResponse(BaseModel):

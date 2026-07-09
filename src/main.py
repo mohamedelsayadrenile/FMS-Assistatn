@@ -5,8 +5,8 @@ from uuid import uuid4
 from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
-from src.config import settings
-from src.core.config import configure_logging
+from src.core.config import settings
+from src.core.logging import configure_logging
 from src.crew import run_fms_assistant
 from src.schemas import ChatContext, ChatRequest, ChatResponse
 from src.services.memory.RedisMemory import RedisMemory

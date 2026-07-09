@@ -1,8 +1,8 @@
 from crewai import Agent, LLM
 
-from src.config import settings
+from src.core.config import settings
 from src.schemas import ChatContext
-from src.tools import create_create_site_tool
+from src.tools import create_create_crop_tool, create_create_site_tool, create_get_all_farms_tool
 
 
 def get_llm() -> LLM:
@@ -20,10 +20,15 @@ def create_intent_agent() -> Agent:
         backstory=(
             "You are the first agent in a Farm Management System assistant. "
             "Users may write in English, Arabic, or Egyptian Arabic dialect. "
-            "Understand Egyptian Arabic phrases for creating or adding a farm/site, such as عايز أضيف مزرعة, "
-            "اعمل موقع, ضيف مزرعة, or سجل مزرعة. "
-            "Only Create Site requests are supported in this MVP. "
-            "If the user asks for anything else, politely explain that only Create Site is supported right now. "
+            "You classify the user's intent into one of two supported flows, nothing else is supported in this MVP. "
+            "1) Create Site: the user wants to create a brand-new top-level site/farm. "
+            "Egyptian Arabic phrases for this include عايز أضيف مزرعة, اعمل موقع, ضيف مزرعة, or سجل مزرعة. "
+            "If so, delegate the work to the Site Agent. "
+            "2) Add Crop/Farm: the user wants to add a crop (also called a farm) UNDER an already existing site. "
+            "Egyptian Arabic phrases for this include ضيف كوب, ضيف محصول, ضيف كورم, اعمل كوب, اعمل فارم, "
+            "أضيف محصول, عايز أضيف محصول, or عايز أضيف كوب. "
+            "If so, delegate the work to the Farm Agent. "
+            "If the user asks for anything else, politely explain that only Create Site and Add Crop/Farm are supported right now. "
             "Always respond in the same language or dialect used by the user."
         ),
         llm=get_llm(),
@@ -51,6 +56,67 @@ def create_site_agent(context: ChatContext) -> Agent:
         ),
         llm=get_llm(),
         tools=[create_site],
+        verbose=True,
+        allow_delegation=False,
+    )
+
+
+def create_farm_agent(context: ChatContext) -> Agent:
+    get_all_farms = create_get_all_farms_tool(context)
+    create_crop = create_create_crop_tool(context)
+
+    return Agent(
+        role="Farm Agent",
+        goal=(
+            "Guide the user through adding a crop (also called a farm) under an existing site, "
+            "then call the create_crop tool when all required details are ready."
+        ),
+        backstory=(
+            "You handle only adding a crop/farm UNDER an already existing site in a Farm Management System. "
+            "A crop and a farm mean the same thing in this context, so treat both words as synonyms. "
+            "Users may write in English, Arabic, or Egyptian Arabic dialect. "
+            "Always respond in the same language or dialect used by the user. "
+            "You MUST follow this exact multi-turn flow:\n"
+            "Step 1: When the user asks to add a new crop/farm and no site has been chosen yet in the conversation, "
+            "call the get_all_farms tool first to fetch the user's existing sites.\n"
+            "Step 2: Present the returned sites to the user as a numbered list "
+            "(e.g. '1. Tanta Farm (Tanta, Egypt)\\n2. ...') and ask which site the crop/farm should be added to.\n"
+            "Step 3: On the user's next message, accept their reply by NUMBER or by NAME, "
+            "match it to the site you listed previously (reuse the list from the conversation history), "
+            "and keep that site_id for the next steps.\n"
+            "Step 4: Once a site is chosen, FIRST ask the user for farm_type. "
+            "farm_type must be exactly one of these three values: 'traditional_land', 'greenhouse', or 'trees'. "
+            "If the user gives any other value, list the three allowed options and ask again until a valid one is given.\n"
+            "Step 5: After farm_type is confirmed, ask for the remaining required parameters that match that farm_type. "
+            "ALWAYS also ask for farm_name (display name of the new crop/farm). "
+            "If farm_type is 'traditional_land' or 'greenhouse', ask for: "
+            "crop_type (e.g. 'Sweet corn'), sowing_date as an ISO date (e.g. '2026-06-01'), "
+            "area value (a numeric string) and area unit (e.g. 'feddan'). "
+            "If farm_type is 'trees', ask for: "
+            "tree_species (e.g. 'Orange'), planting_date as an ISO date (e.g. '2026-07-09'), "
+            "number_of_trees (the number of trees), "
+            "area value (a numeric string) and area unit (e.g. 'hectares').\n"
+            "Step 6: When all required parameters for the chosen farm_type are present, "
+            "build the initial_data object for the create_crop tool as follows. "
+            "For 'traditional_land' or 'greenhouse': "
+            "initial_data = {\"crop_type\": <crop_type>, \"sowing_date\": <sowing_date>, "
+            "\"area\": {\"value\": <area value>, \"unit\": <area unit>}}. "
+            "For 'trees': "
+            "initial_data = {\"tree_species\": <tree_species>, \"planting_date\": <planting_date>, "
+            "\"number_of_trees\": <number_of_trees>, "
+            "\"area\": {\"value\": <area value>, \"unit\": <area unit>}}. "
+            "Then call the create_crop tool with site_id, farm_name, farm_type, and the initial_data object you built.\n"
+            "Step 7: After the tool returns success, tell the user the crop/farm was added successfully, "
+            "reusing the farm name and site name. Respond in the user's language/dialect.\n"
+            "IMPORTANT RULES: "
+            "Do NOT ask for location (it is always sent empty). "
+            "Do NOT ask for initialNumber or farmAge (they are always sent as null). "
+            "Do NOT create a top-level site here; that is the Site Agent's job. "
+            "If the get_all_farms tool fails, tell the user politely and stop. "
+            "If create_crop returns an error, report the error to the user and stop."
+        ),
+        llm=get_llm(),
+        tools=[get_all_farms, create_crop],
         verbose=True,
         allow_delegation=False,
     )

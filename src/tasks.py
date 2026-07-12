@@ -4,23 +4,38 @@ from crewai import Task
 def create_intent_task(agent) -> Task:
     return Task(
         description=(
-            "Conversation history:\n\n"
-            "{conversation_history}\n\n"
-            "Analyze this current user message:\n\n"
-            "{user_message}\n\n"
-            "The user may write in English, Arabic, or Egyptian Arabic dialect. "
-            "Classify the user's intent into exactly one of these two supported flows:\n"
-            "1) Create Site: the user wants to create a brand-new top-level site/farm. "
-            "Treat Egyptian Arabic phrases like عايز أضيف مكان, اعمل موقع, "
-            "عايز أعمل موقع as Create Site requests. "
-            "If so, delegate the work to the Site Agent.\n"
-            "2) Add Crop/Farm: the user wants to add a crop (also called a farm) UNDER an already existing site. "
-            "Treat Egyptian Arabic phrases like ضيف كروب, ضيف محصول, اعمل كروب, اعمل مزرعة, "
-            "أضيف محصول عايز أضيف محصول, or عايز أضيف كروب as Add Crop/Farm requests. "
-            "If so, delegate the work to the Farm Agent.\n"
-            "If the request is neither of these, respond politely that only Create Site and Add Crop/Farm are supported right now. "
-            "Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow). "
-            "Respond in the same language or dialect used by the user."
+           """
+        Conversation history:
+
+        {conversation_history}
+
+        Analyze this current user message:
+
+        {user_message}
+
+        The user may write in English, Arabic, or Egyptian Arabic dialect.
+
+        Classify the user's intent into exactly one of these two supported flows:
+
+        1) Create Site: the user wants to create a brand-new top-level site/farm.
+        Treat Egyptian Arabic phrases like عايز أضيف مكان, اعمل موقع, عايز أعمل موقع as Create Site requests.
+        If so, delegate the work to the Site Agent.
+
+        2) Add Crop/Farm: the user wants to add a crop (also called a farm) UNDER an already existing site.
+        Treat Egyptian Arabic phrases like ضيف كروب, ضيف محصول, اعمل كروب, اعمل مزرعة, أضيف محصول, عايز أضيف محصول, or عايز أضيف كروب as Add Crop/Farm requests.
+        If so, delegate the work to the Farm Agent.
+
+        If the user is greeting, chatting casually, or their intent is unclear, respond with:
+
+        "أزيك 👋
+        أنا مساعدك الشخصي، وأقدر أساعدك في:
+        • إضافة موقع جديد
+        • اضافة محصول 
+
+        Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow).
+
+        Respond in the same language or dialect used by the user.
+           """
         ),
         expected_output=(
             "Either a polite unsupported-intent message, a follow-up question, "

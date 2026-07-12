@@ -42,6 +42,8 @@ def create_intent_task(agent) -> Task:
 
         Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow).
 
+        When you delegate, pass the user's COMPLETE original request verbatim (do not summarize or drop details), so the specialized agent can extract every parameter the user already provided and avoid re-asking for it.
+
         Important: Always respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of which language the user writes in.
         Tone: Use a formal-yet-friendly tone (احترامي وودود) — polite and professional, but warm and approachable. Greet the user with 'أهلاً'/'تفضل' style pleasantries, yet keep answers concise and well-structured. Avoid overly colloquial slang; keep it dignified and helpful.
            """
@@ -55,29 +57,36 @@ def create_intent_task(agent) -> Task:
 
 
 def create_site_task(agent) -> Task:
+    # NOTE: Not currently wired into the crew (see src/crew.py). The Site Agent's
+    # backstory drives behavior; this description is kept aligned for consistency.
     return Task(
         description=(
             "Handle the Create Site request from this user message:\n\n"
             "{user_message}\n\n"
-            "Extract the farm/site name and location to use as create_site arguments. "
+            "Extract the farm/site name and location from the message to use as create_site arguments. "
             "The farm/site name and location may be written in Arabic or Egyptian Arabic; preserve them exactly. "
-            "If either the farm/site name or location is missing, ask one concise follow-up question. "
-            "Ask follow-up questions in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
-            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
-            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, avoid overly colloquial slang. "
+            "Never ask for information the user already provided. "
+            "If either the farm/site name or location is genuinely missing, ask for the missing pieces "
+            "together in one concise follow-up question. "
             "Do not ask for type because it is optional and omitted from the API payload. "
             "Do not ask for timezone because it is always Africa/Cairo. "
-            "If both farm/site name and location are available, call the create_site tool."
+            "When both name and location are known, first show a one-line summary and ask the user to confirm; "
+            "only after the user confirms, call the create_site tool. "
+            "Ask questions and confirmations in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, avoid overly colloquial slang."
         ),
         expected_output=(
-            "A concise response explaining whether the site was created, "
-            "or a follow-up question asking for missing information. Written in Egyptian Arabic dialect."
+            "A concise response: a follow-up question for missing info, a confirmation prompt, "
+            "or a success/failure message after calling create_site. Written in Egyptian Arabic dialect."
         ),
         agent=agent,
     )
 
 
 def create_farm_task(agent) -> Task:
+    # NOTE: Not currently wired into the crew (see src/crew.py). The Farm Agent's
+    # backstory drives behavior; this description is kept aligned for consistency.
     return Task(
         description=(
             "Conversation history:\n\n"
@@ -86,22 +95,26 @@ def create_farm_task(agent) -> Task:
             "{user_message}\n\n"
             "The user may write in English, Arabic, or Egyptian Arabic dialect. "
             "A crop and a farm mean the same thing here. "
-            "Follow this exact multi-turn flow, relying on the conversation history to carry state across turns:\n"
-            "Step 1: If no site has been chosen yet in the conversation, call the get_all_farms tool to fetch the user's sites.\n"
-            "Step 2: Present the sites as a numbered list and ask which site to add the crop/farm to.\n"
-            "Step 3: When the user answers by number or name, match it to the previously listed site "
-            "(use the list recorded in the conversation history) and keep its site_id.\n"
-            "Step 4: FIRST ask for farm_type. It must be exactly one of: 'traditional_land', 'greenhouse', or 'trees'. "
-            "If the user gives any other value, list the three allowed options and ask again.\n"
-            "Step 5: After farm_type is confirmed, ask for the remaining required parameters that match that farm_type. "
-            "Always also ask for farm_name. "
-            "For 'traditional_land' or 'greenhouse' ask: crop_type, sowing_date (ISO date like '2026-06-01'), area value, area unit. "
-            "For 'trees' ask: tree_species, planting_date (ISO date like '2026-07-09'), number_of_trees, area value, area unit.\n"
-            "Step 6: When all required parameters are present, build the initial_data object for that farm_type "
+            "Extract everything the user already gave, ask once for what's missing, confirm, then act. "
+            "Rely on the conversation history to carry state across turns:\n"
+            "Step 1 (EXTRACT FIRST): Pull out every parameter already provided — any site the user named, "
+            "farm_name, farm_type, and the crop/tree details. Map natural-language farm types to the API value "
+            "(صوبة → 'greenhouse'; أرض/حقل → 'traditional_land'; أشجار/شجر → 'trees'). "
+            "Never ask for something the user already provided.\n"
+            "Step 2 (RESOLVE THE SITE): Call the get_all_farms tool (or reuse the list already in the history). "
+            "If the user named a site matching exactly one entry, use its site_id silently. Otherwise present the "
+            "sites as a numbered list and ask which one; accept the reply by number or name.\n"
+            "Step 3 (ASK ONCE FOR WHAT'S MISSING): Required is farm_name plus, for 'traditional_land'/'greenhouse': "
+            "crop_type, sowing_date (ISO like '2026-06-01'), area value, area unit; for 'trees': tree_species, "
+            "planting_date (ISO like '2026-07-09'), number_of_trees, area value, area unit. If farm_type is missing "
+            "or invalid, include it and list the three allowed options. Ask for all missing params together in one message.\n"
+            "Step 4 (CONFIRM BEFORE ACTING): When site and all required params are known, show a short summary and "
+            "ask the user to confirm; do not call the tool yet.\n"
+            "Step 5 (ACT ON CONFIRMATION): After the user confirms, build the initial_data object for that farm_type "
             "(crop_type+sowing_date+area for traditional_land/greenhouse; "
             "tree_species+planting_date+number_of_trees+area for trees) "
             "and call the create_crop tool with site_id, farm_name, farm_type, and initial_data.\n"
-            "Step 7: On success, tell the user the crop/farm was added successfully.\n"
+            "Step 6 (REPORT): On success, tell the user the crop/farm was added successfully.\n"
             "Do NOT ask for location (sent empty), and do NOT ask for initialNumber or farmAge (sent as null). "
             "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language. "
             "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
@@ -116,6 +129,8 @@ def create_farm_task(agent) -> Task:
 
 
 def create_task_task(agent) -> Task:
+    # NOTE: Not currently wired into the crew (see src/crew.py). The Task Agent's
+    # backstory drives behavior; this description is kept aligned for consistency.
     return Task(
         description=(
             "Conversation history:\n\n"
@@ -123,18 +138,21 @@ def create_task_task(agent) -> Task:
             "Handle this current user message for adding a task (a task-type):\n\n"
             "{user_message}\n\n"
             "The user may write in English, Arabic, or Egyptian Arabic dialect. "
-            "Follow this exact multi-turn flow, relying on the conversation history to carry state across turns:\n"
-            "Step 1: Ask for the task title and description. Preserve Arabic titles/descriptions exactly as written.\n"
-            "Step 2: Ask for input_type. It must be exactly one of: 'string', 'number', 'image', 'checkbox', or 'select'. "
-            "If the user gives any other value, list the five allowed options and ask again.\n"
-            "Step 3: Ask for farm_type. It must be exactly one of: 'greenhouse', 'traditional_land', or 'trees'. "
-            "If the user gives any other value, list the three allowed options and ask again.\n"
-            "Step 4: ONLY if input_type is 'select', ask for the list of options (allowed choices). "
-            "For every other input_type, do not ask for options.\n"
-            "Step 5: When title, description, input_type, and farm_type are present "
-            "(plus options when input_type is 'select'), call the create_task tool "
+            "Extract everything the user already gave, ask once for what's missing, confirm, then act. "
+            "Rely on the conversation history to carry state across turns:\n"
+            "Step 1 (EXTRACT FIRST): Pull out every parameter already provided — title, description, input_type, "
+            "farm_type, and options. Preserve Arabic titles/descriptions exactly. Map natural language to the API value "
+            "(input_type: نص → 'string'; رقم → 'number'; صورة → 'image'; اختيار/صح وخطأ → 'checkbox'; قائمة → 'select'. "
+            "farm_type: صوبة → 'greenhouse'; أرض/حقل → 'traditional_land'; أشجار → 'trees'). "
+            "Never ask for something the user already provided.\n"
+            "Step 2 (ASK ONCE FOR WHAT'S MISSING): Required is title, description, input_type, and farm_type "
+            "(plus options ONLY when input_type is 'select'). If input_type or farm_type is invalid, include it and "
+            "list its allowed values. Ask for all missing params together in one message; never one field per turn.\n"
+            "Step 3 (CONFIRM BEFORE ACTING): When all required params are known, show a short summary and ask the user "
+            "to confirm; do not call the tool yet.\n"
+            "Step 4 (ACT ON CONFIRMATION): After the user confirms, call the create_task tool "
             "with title, description, input_type, farm_type, and options.\n"
-            "Step 6: On success, tell the user the task was added successfully, reusing the task title.\n"
+            "Step 5 (REPORT): On success, tell the user the task was added successfully, reusing the task title.\n"
             "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language. "
             "Keep tool/API parameter values (such as input_type='number') in English as required by the API. "
             "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "

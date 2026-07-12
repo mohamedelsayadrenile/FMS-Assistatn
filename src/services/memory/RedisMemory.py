@@ -20,8 +20,9 @@ class ConversationMessage(BaseModel):
 
 
 class RedisMemory:
-    def __init__(self, redis_url: str, message_limit: int = 10) -> None:
+    def __init__(self, redis_url: str, message_limit: int = 12, ttl_seconds: int = 3600) -> None:
         self.message_limit = message_limit
+        self.ttl_seconds = ttl_seconds
         self.redis = Redis.from_url(redis_url, decode_responses=True)
 
     async def get_messages(self, conversation_id: str) -> list[ConversationMessage]:
@@ -55,6 +56,7 @@ class RedisMemory:
             async with self.redis.pipeline(transaction=True) as pipe:
                 pipe.rpush(key, message.model_dump_json())
                 pipe.ltrim(key, -self.message_limit, -1)
+                pipe.expire(key, self.ttl_seconds)
                 await pipe.execute()
         except Exception:
             logger.exception(
@@ -65,7 +67,12 @@ class RedisMemory:
 
         logger.info(
             "Conversation memory message saved",
-            extra={"conversation_id": conversation_id, "role": role, "message_limit": self.message_limit},
+            extra={
+                "conversation_id": conversation_id,
+                "role": role,
+                "message_limit": self.message_limit,
+                "ttl_seconds": self.ttl_seconds,
+            },
         )
 
     async def add_exchange(self, conversation_id: str, user_message: str, assistant_message: str) -> None:
@@ -77,6 +84,7 @@ class RedisMemory:
             async with self.redis.pipeline(transaction=True) as pipe:
                 pipe.rpush(key, user_memory.model_dump_json(), assistant_memory.model_dump_json())
                 pipe.ltrim(key, -self.message_limit, -1)
+                pipe.expire(key, self.ttl_seconds)
                 await pipe.execute()
         except Exception:
             logger.exception("Failed to save conversation memory exchange", extra={"conversation_id": conversation_id})
@@ -84,7 +92,11 @@ class RedisMemory:
 
         logger.info(
             "Conversation memory exchange saved",
-            extra={"conversation_id": conversation_id, "message_limit": self.message_limit},
+            extra={
+                "conversation_id": conversation_id,
+                "message_limit": self.message_limit,
+                "ttl_seconds": self.ttl_seconds,
+            },
         )
 
     async def format_history(self, conversation_id: str) -> str:

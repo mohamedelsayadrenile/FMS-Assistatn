@@ -13,7 +13,7 @@ def create_intent_task(agent) -> Task:
 
         {user_message}
 
-        The user may write in English, Arabic, or Egyptian Arabic dialect.
+        The user will write in Egyptian Arabic dialect.
 
         Classify the user's intent into exactly one of these two supported flows:
 

@@ -22,7 +22,8 @@ class Settings(BaseModel):
     )
     api_timeout_seconds: float = float(os.environ.get("API_TIMEOUT_SECONDS", "30"))
     redis_url: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    conversation_memory_limit: int = int(os.environ.get("CONVERSATION_MEMORY_LIMIT", "10"))
+    conversation_memory_limit: int = int(os.environ.get("CONVERSATION_MEMORY_LIMIT", "12"))
+    conversation_ttl_seconds: int = int(os.environ.get("CONVERSATION_TTL_SECONDS", "3600"))
     log_level: str = os.environ.get("LOG_LEVEL", "INFO")
     log_format: str = os.environ.get("LOG_FORMAT", "json")
 

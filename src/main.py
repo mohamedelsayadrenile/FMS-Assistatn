@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 memory = RedisMemory(
     redis_url=settings.redis_url,
     message_limit=settings.conversation_memory_limit,
+    ttl_seconds=settings.conversation_ttl_seconds,
 )
 
 
@@ -23,7 +24,11 @@ memory = RedisMemory(
 async def lifespan(app: FastAPI):
     logger.info(
         "Application startup complete",
-        extra={"redis_url": settings.redis_url, "memory_limit": settings.conversation_memory_limit},
+        extra={
+            "redis_url": settings.redis_url,
+            "memory_limit": settings.conversation_memory_limit,
+            "ttl_seconds": settings.conversation_ttl_seconds,
+        },
     )
     yield
     logger.info("Application shutdown started")

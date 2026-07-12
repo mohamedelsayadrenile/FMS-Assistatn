@@ -9,8 +9,9 @@ import streamlit as st
 CHAT_ENDPOINT = "/chat"
 REQUEST_TIMEOUT_SECONDS = 120
 WELCOME_MESSAGE = (
-    "Welcome to the FMS Assistant. Fill in the details in the sidebar "
-    "(Backend URL, JWT, ConversationID, companyId, managerIds), then start chatting below."
+    "أهلاً بيك في مساعد FMS 🌾\n"
+    "املا البيانات في القايمه على الشمال (Backend URL, JWT, ConversationID, companyId, managerIds) "
+    "وبعدها ابدأ المحادثه من تحت."
 )
 
 

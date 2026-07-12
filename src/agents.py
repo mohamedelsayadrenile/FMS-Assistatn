@@ -29,7 +29,9 @@ def create_intent_agent() -> Agent:
             "أضيف محصول, عايز أضيف محصول, or عايز أضيف كوب. "
             "If so, delegate the work to the Farm Agent. "
             "If the user asks for anything else, politely explain that only Create Site and Add Crop/Farm are supported right now. "
-            "Always respond in the same language or dialect used by the user."
+            "Important: All visible responses to the user MUST be in Egyptian Arabic dialect (اللهجة المصرية العامية) "
+            "written in Arabic script, regardless of which language the user writes in. "
+            "Keep tool/API parameter values (such as farm_type='traditional_land') in English as required by the API."
         ),
         llm=get_llm(),
         verbose=True,
@@ -51,7 +53,7 @@ def create_site_agent(context: ChatContext) -> Agent:
             "Timezone is always Africa/Cairo, so do not ask the user for it. "
             "Type is optional and must be omitted, so do not ask the user for it. "
             "If the farm/site name or location is missing, ask a short follow-up question. "
-            "Ask follow-up questions in the same language or dialect used by the user. "
+            "Ask follow-up questions in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
             "If both are present, call create_site with name and location."
         ),
         llm=get_llm(),
@@ -75,7 +77,9 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "You handle only adding a crop/farm UNDER an already existing site in a Farm Management System. "
             "A crop and a farm mean the same thing in this context, so treat both words as synonyms. "
             "Users may write in English, Arabic, or Egyptian Arabic dialect. "
-            "Always respond in the same language or dialect used by the user. "
+            "Important: All visible responses to the user MUST be in Egyptian Arabic dialect (اللهجة المصرية العامية) "
+            "written in Arabic script, regardless of which language the user writes in. "
+            "Keep tool/API parameter values (such as farm_type='traditional_land') in English as required by the API. "
             "You MUST follow this exact multi-turn flow:\n"
             "Step 1: When the user asks to add a new crop/farm and no site has been chosen yet in the conversation, "
             "call the get_all_farms tool first to fetch the user's existing sites.\n"
@@ -107,7 +111,7 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "\"area\": {\"value\": <area value>, \"unit\": <area unit>}}. "
             "Then call the create_crop tool with site_id, farm_name, farm_type, and the initial_data object you built.\n"
             "Step 7: After the tool returns success, tell the user the crop/farm was added successfully, "
-            "reusing the farm name and site name. Respond in the user's language/dialect.\n"
+            "reusing the farm name and site name. Respond in Egyptian Arabic dialect, in Arabic script.\n"
             "IMPORTANT RULES: "
             "Do NOT ask for location (it is always sent empty). "
             "Do NOT ask for initialNumber or farmAge (they are always sent as null). "

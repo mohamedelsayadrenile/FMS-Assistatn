@@ -13,7 +13,7 @@ def create_intent_task(agent) -> Task:
 
         {user_message}
 
-        The user will write in Egyptian Arabic dialect.
+        The user may write in English, Arabic, or Egyptian Arabic dialect.
 
         Classify the user's intent into exactly one of these two supported flows:
 
@@ -34,12 +34,12 @@ def create_intent_task(agent) -> Task:
 
         Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow).
 
-        Respond in the same language or dialect used by the user.
+        Important: Always respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of which language the user writes in.
            """
         ),
         expected_output=(
             "Either a polite unsupported-intent message, a follow-up question, "
-            "or a delegation to the Site Agent or the Farm Agent."
+            "or a delegation to the Site Agent or the Farm Agent. Written in Egyptian Arabic dialect."
         ),
         agent=agent,
     )
@@ -53,14 +53,14 @@ def create_site_task(agent) -> Task:
             "Extract the farm/site name and location to use as create_site arguments. "
             "The farm/site name and location may be written in Arabic or Egyptian Arabic; preserve them exactly. "
             "If either the farm/site name or location is missing, ask one concise follow-up question. "
-            "Ask follow-up questions in the same language or dialect used by the user. "
+            "Ask follow-up questions in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
             "Do not ask for type because it is optional and omitted from the API payload. "
             "Do not ask for timezone because it is always Africa/Cairo. "
             "If both farm/site name and location are available, call the create_site tool."
         ),
         expected_output=(
             "A concise response explaining whether the site was created, "
-            "or a follow-up question asking for missing information."
+            "or a follow-up question asking for missing information. Written in Egyptian Arabic dialect."
         ),
         agent=agent,
     )
@@ -92,11 +92,11 @@ def create_farm_task(agent) -> Task:
             "and call the create_crop tool with site_id, farm_name, farm_type, and initial_data.\n"
             "Step 7: On success, tell the user the crop/farm was added successfully.\n"
             "Do NOT ask for location (sent empty), and do NOT ask for initialNumber or farmAge (sent as null). "
-            "Respond in the same language or dialect used by the user."
+            "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language."
         ),
         expected_output=(
             "Either a list of the user's sites to choose from, a follow-up question for missing details, "
-            "or a success/failure message after calling create_crop."
+            "or a success/failure message after calling create_crop. Written in Egyptian Arabic dialect."
         ),
         agent=agent,
     )

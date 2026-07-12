@@ -26,11 +26,14 @@ def create_intent_task(agent) -> Task:
         If so, delegate the work to the Farm Agent.
 
         If the user is greeting, chatting casually, or their intent is unclear, respond with:
+        أزيك 👋
 
-        "أزيك 👋
-        أنا مساعدك الشخصي، وأقدر أساعدك في:
-        • إضافة موقع جديد
-        • اضافة محصول 
+        أنا مساعدك الشخصي، وممكن أساعدك في:
+
+        1. إضافة موقع جديد 🏡
+        2. إضافة محصول 🌱
+
+        اكتب طلبك، وأنا هساعدك خطوة بخطوة.
 
         Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow).
 

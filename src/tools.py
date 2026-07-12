@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def create_create_site_tool(context: ChatContext) -> Any:
     @tool("create_site")
-    def create_site(name: str, location: str) -> dict[str, Any]:
+    async def create_site(name: str, location: str) -> dict[str, Any]:
         """Create a site in the FMS."""
         payload = {
             "name": name,
@@ -47,12 +47,14 @@ def create_create_site_tool(context: ChatContext) -> Any:
         start_time = perf_counter()
 
         try:
-            response = httpx.post(
-                settings.create_site_url,
-                json=payload,
-                headers=headers,
-                timeout=settings.create_site_timeout_seconds,
-            )
+            async with httpx.AsyncClient(
+                timeout=settings.create_site_timeout_seconds
+            ) as client:
+                response = await client.post(
+                    settings.create_site_url,
+                    json=payload,
+                    headers=headers,
+                )
         except httpx.HTTPError as exc:
             latency_ms = round((perf_counter() - start_time) * 1000, 2)
             logger.exception(
@@ -130,7 +132,7 @@ def create_create_site_tool(context: ChatContext) -> Any:
 
 def create_get_all_farms_tool(context: ChatContext) -> Any:
     @tool("get_all_farms")
-    def get_all_farms() -> dict[str, Any]:
+    async def get_all_farms() -> dict[str, Any]:
         """List all the user's sites in the FMS, each with a number, id, name, location, and type."""
         headers = {
             "Content-Type": "application/json",
@@ -152,11 +154,11 @@ def create_get_all_farms_tool(context: ChatContext) -> Any:
         start_time = perf_counter()
 
         try:
-            response = httpx.get(
-                url,
-                headers=headers,
-                timeout=settings.api_timeout_seconds,
-            )
+            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
+                response = await client.get(
+                    url,
+                    headers=headers,
+                )
         except httpx.HTTPError as exc:
             latency_ms = round((perf_counter() - start_time) * 1000, 2)
             logger.exception(
@@ -240,7 +242,7 @@ def create_get_all_farms_tool(context: ChatContext) -> Any:
 
 def create_create_crop_tool(context: ChatContext) -> Any:
     @tool("create_crop")
-    def create_crop(
+    async def create_crop(
         site_id: str,
         farm_name: str,
         farm_type: str,
@@ -307,12 +309,12 @@ def create_create_crop_tool(context: ChatContext) -> Any:
         start_time = perf_counter()
 
         try:
-            response = httpx.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=settings.api_timeout_seconds,
-            )
+            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                )
         except httpx.HTTPError as exc:
             latency_ms = round((perf_counter() - start_time) * 1000, 2)
             logger.exception(

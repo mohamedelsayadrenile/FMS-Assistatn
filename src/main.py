@@ -3,8 +3,6 @@ import logging
 from uuid import uuid4
 
 from fastapi import FastAPI
-from starlette.concurrency import run_in_threadpool
-
 from src.core.config import settings
 from src.core.logging import configure_logging
 from src.crew import run_fms_assistant
@@ -68,7 +66,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             "history_char_count": len(conversation_history),
         },
     )
-    response = await run_in_threadpool(run_fms_assistant, request.message, context, conversation_history)
+    response = await run_fms_assistant(request.message, context, conversation_history)
     await memory.add_exchange(request.conversation_id, request.message, response)
     logger.info(
         "Chat request completed",

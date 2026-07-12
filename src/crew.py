@@ -24,7 +24,7 @@ def build_crew(context: ChatContext) -> Crew:
     )
 
 
-def run_fms_assistant(user_message: str, context: ChatContext, conversation_history: str) -> str:
+async def run_fms_assistant(user_message: str, context: ChatContext, conversation_history: str) -> str:
     start_time = perf_counter()
     logger.info(
         "CrewAI run started",
@@ -36,7 +36,7 @@ def run_fms_assistant(user_message: str, context: ChatContext, conversation_hist
     )
     crew = build_crew(context)
     try:
-        result = crew.kickoff(
+        result = await crew.akickoff(
             inputs={
                 "user_message": user_message,
                 "conversation_id": context.conversation_id,

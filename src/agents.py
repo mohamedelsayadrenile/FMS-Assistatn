@@ -31,7 +31,10 @@ def create_intent_agent() -> Agent:
             "If the user asks for anything else, politely explain that only Create Site and Add Crop/Farm are supported right now. "
             "Important: All visible responses to the user MUST be in Egyptian Arabic dialect (اللهجة المصرية العامية) "
             "written in Arabic script, regardless of which language the user writes in. "
-            "Keep tool/API parameter values (such as farm_type='traditional_land') in English as required by the API."
+            "Keep tool/API parameter values (such as farm_type='traditional_land') in English as required by the API. "
+            "Tone: Use a formal-yet-friendly tone (احترامي وودود) — be polite and professional, but warm and approachable. "
+            "Greet the user with 'أهلاً'/'تفضل' style pleasantries, yet keep answers concise and well-structured. "
+            "Avoid overly colloquial slang; keep it dignified and helpful."
         ),
         llm=get_llm(),
         verbose=True,
@@ -54,6 +57,9 @@ def create_site_agent(context: ChatContext) -> Agent:
             "Type is optional and must be omitted, so do not ask the user for it. "
             "If the farm/site name or location is missing, ask a short follow-up question. "
             "Ask follow-up questions in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
+            "Tone: Use a formal-yet-friendly tone (احترامي وودود) — polite and professional, but warm and approachable. "
+            "Greet with 'تفضل'/'أهلاً' style pleasantries, yet keep answers concise and well-structured. "
+            "Avoid overly colloquial slang; keep it dignified and helpful. "
             "If both are present, call create_site with name and location."
         ),
         llm=get_llm(),
@@ -111,7 +117,10 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "\"area\": {\"value\": <area value>, \"unit\": <area unit>}}. "
             "Then call the create_crop tool with site_id, farm_name, farm_type, and the initial_data object you built.\n"
             "Step 7: After the tool returns success, tell the user the crop/farm was added successfully, "
-            "reusing the farm name and site name. Respond in Egyptian Arabic dialect, in Arabic script.\n"
+            "reusing the farm name and site name. Respond in Egyptian Arabic dialect, in Arabic script. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, "
+            "avoid overly colloquial slang.\n"
             "IMPORTANT RULES: "
             "Do NOT ask for location (it is always sent empty). "
             "Do NOT ask for initialNumber or farmAge (they are always sent as null). "

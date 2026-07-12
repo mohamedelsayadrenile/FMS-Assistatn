@@ -26,18 +26,19 @@ def create_intent_task(agent) -> Task:
         If so, delegate the work to the Farm Agent.
 
         If the user is greeting, chatting casually, or their intent is unclear, respond with:
-        أزيك 👋
+        أهلاً بك 👋
 
-        أنا مساعدك الشخصي، وممكن أساعدك في:
+        أنا مساعدك الشخصي في إدارة المزرعة، وممكن أساعدك في:
 
         1. إضافة موقع جديد 🏡
         2. إضافة محصول 🌱
 
-        اكتب طلبك، وأنا هساعدك خطوة بخطوة.
+        تفضل اكتب طلبك، وأنا هساعدك خطوة بخطوة.
 
         Use the conversation history to resolve follow-up messages (for example, a user continuing a multi-turn add-crop flow).
 
         Important: Always respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of which language the user writes in.
+        Tone: Use a formal-yet-friendly tone (احترامي وودود) — polite and professional, but warm and approachable. Greet the user with 'أهلاً'/'تفضل' style pleasantries, yet keep answers concise and well-structured. Avoid overly colloquial slang; keep it dignified and helpful.
            """
         ),
         expected_output=(
@@ -57,6 +58,8 @@ def create_site_task(agent) -> Task:
             "The farm/site name and location may be written in Arabic or Egyptian Arabic; preserve them exactly. "
             "If either the farm/site name or location is missing, ask one concise follow-up question. "
             "Ask follow-up questions in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, avoid overly colloquial slang. "
             "Do not ask for type because it is optional and omitted from the API payload. "
             "Do not ask for timezone because it is always Africa/Cairo. "
             "If both farm/site name and location are available, call the create_site tool."
@@ -95,7 +98,9 @@ def create_farm_task(agent) -> Task:
             "and call the create_crop tool with site_id, farm_name, farm_type, and initial_data.\n"
             "Step 7: On success, tell the user the crop/farm was added successfully.\n"
             "Do NOT ask for location (sent empty), and do NOT ask for initialNumber or farmAge (sent as null). "
-            "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language."
+            "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, avoid overly colloquial slang."
         ),
         expected_output=(
             "Either a list of the user's sites to choose from, a follow-up question for missing details, "

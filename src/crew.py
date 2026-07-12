@@ -3,7 +3,12 @@ from time import perf_counter
 
 from crewai import Crew, Process
 
-from src.agents import create_farm_agent, create_intent_agent, create_site_agent
+from src.agents import (
+    create_farm_agent,
+    create_intent_agent,
+    create_site_agent,
+    create_task_agent,
+)
 from src.schemas import ChatContext
 from src.tasks import create_intent_task
 
@@ -15,9 +20,10 @@ def build_crew(context: ChatContext) -> Crew:
     intent_agent = create_intent_agent()
     site_agent = create_site_agent(context)
     farm_agent = create_farm_agent(context)
+    task_agent = create_task_agent(context)
 
     return Crew(
-        agents=[intent_agent, site_agent, farm_agent],
+        agents=[intent_agent, site_agent, farm_agent, task_agent],
         tasks=[create_intent_task(intent_agent)],
         process=Process.sequential,
         verbose=True,

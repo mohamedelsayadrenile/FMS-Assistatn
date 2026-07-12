@@ -25,6 +25,10 @@ def create_intent_task(agent) -> Task:
         Treat Egyptian Arabic phrases like ضيف كروب, ضيف محصول, اعمل كروب, اعمل مزرعة, أضيف محصول, عايز أضيف محصول, or عايز أضيف كروب as Add Crop/Farm requests.
         If so, delegate the work to the Farm Agent.
 
+        3) Add Task: the user wants to add a task (a task-type used in the FMS).
+        Treat Egyptian Arabic phrases like عايز أضيف مهمة, ضيف مهمة, اعمل مهمة, أضيف مهمة, عايز أعمل مهمة, or ضيف تاسك as Add Task requests.
+        If so, delegate the work to the Task Agent.
+
         If the user is greeting, chatting casually, or their intent is unclear, respond with:
         أهلاً بك 👋
 
@@ -32,6 +36,7 @@ def create_intent_task(agent) -> Task:
 
         1. إضافة موقع جديد 🏡
         2. إضافة محصول 🌱
+        3. إضافة مهمة ✅
 
         تفضل اكتب طلبك، وأنا هساعدك خطوة بخطوة.
 
@@ -105,6 +110,39 @@ def create_farm_task(agent) -> Task:
         expected_output=(
             "Either a list of the user's sites to choose from, a follow-up question for missing details, "
             "or a success/failure message after calling create_crop. Written in Egyptian Arabic dialect."
+        ),
+        agent=agent,
+    )
+
+
+def create_task_task(agent) -> Task:
+    return Task(
+        description=(
+            "Conversation history:\n\n"
+            "{conversation_history}\n\n"
+            "Handle this current user message for adding a task (a task-type):\n\n"
+            "{user_message}\n\n"
+            "The user may write in English, Arabic, or Egyptian Arabic dialect. "
+            "Follow this exact multi-turn flow, relying on the conversation history to carry state across turns:\n"
+            "Step 1: Ask for the task title and description. Preserve Arabic titles/descriptions exactly as written.\n"
+            "Step 2: Ask for input_type. It must be exactly one of: 'string', 'number', 'image', 'checkbox', or 'select'. "
+            "If the user gives any other value, list the five allowed options and ask again.\n"
+            "Step 3: Ask for farm_type. It must be exactly one of: 'greenhouse', 'traditional_land', or 'trees'. "
+            "If the user gives any other value, list the three allowed options and ask again.\n"
+            "Step 4: ONLY if input_type is 'select', ask for the list of options (allowed choices). "
+            "For every other input_type, do not ask for options.\n"
+            "Step 5: When title, description, input_type, and farm_type are present "
+            "(plus options when input_type is 'select'), call the create_task tool "
+            "with title, description, input_type, farm_type, and options.\n"
+            "Step 6: On success, tell the user the task was added successfully, reusing the task title.\n"
+            "Respond in Egyptian Arabic dialect (اللهجة المصرية العامية), written in Arabic script, regardless of the user's language. "
+            "Keep tool/API parameter values (such as input_type='number') in English as required by the API. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, avoid overly colloquial slang."
+        ),
+        expected_output=(
+            "Either a follow-up question for missing details, "
+            "or a success/failure message after calling create_task. Written in Egyptian Arabic dialect."
         ),
         agent=agent,
     )

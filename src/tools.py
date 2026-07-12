@@ -391,3 +391,170 @@ def create_create_crop_tool(context: ChatContext) -> Any:
         }
 
     return create_crop
+
+
+def create_create_task_tool(context: ChatContext) -> Any:
+    @tool("create_task")
+    async def create_task(
+        title: str,
+        description: str,
+        input_type: str,
+        farm_type: str,
+        options: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a new task-type in the FMS.
+
+        input_type must be one of: "string", "number", "image", "checkbox", or "select".
+        farm_type must be one of: "greenhouse", "traditional_land", or "trees".
+        options is a list of choice strings and is only required when input_type is
+        "select"; it is ignored for all other input types.
+        """
+        if input_type not in ("string", "number", "image", "checkbox", "select"):
+            message = (
+                f"Invalid input_type '{input_type}'. "
+                "Allowed values: string, number, image, checkbox, select."
+            )
+            logger.warning(
+                "create_task tool rejected invalid input_type",
+                extra={
+                    "request_id": context.request_id,
+                    "conversation_id": context.conversation_id,
+                    "company_id": context.company_id,
+                    "title": title,
+                    "input_type": input_type,
+                    "farm_type": farm_type,
+                },
+            )
+            return {"success": False, "message": message}
+
+        if farm_type not in ("greenhouse", "traditional_land", "trees"):
+            message = (
+                f"Invalid farm_type '{farm_type}'. "
+                "Allowed values: greenhouse, traditional_land, trees."
+            )
+            logger.warning(
+                "create_task tool rejected invalid farm_type",
+                extra={
+                    "request_id": context.request_id,
+                    "conversation_id": context.conversation_id,
+                    "company_id": context.company_id,
+                    "title": title,
+                    "input_type": input_type,
+                    "farm_type": farm_type,
+                },
+            )
+            return {"success": False, "message": message}
+
+        payload = {
+            "title": title,
+            "description": description,
+            "input_type": input_type,
+            "farm_type": farm_type,
+            "input_config": {"options": options or [""]},
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"JWT {context.jwt}",
+        }
+        url = settings.create_task_url
+
+        logger.info(
+            "create_task tool started task-type creation API call",
+            extra={
+                "request_id": context.request_id,
+                "conversation_id": context.conversation_id,
+                "company_id": context.company_id,
+                "title": title,
+                "input_type": input_type,
+                "farm_type": farm_type,
+                "url": url,
+                "method": "POST",
+                "request_payload": payload,
+            },
+        )
+        start_time = perf_counter()
+
+        try:
+            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                )
+        except httpx.HTTPError as exc:
+            latency_ms = round((perf_counter() - start_time) * 1000, 2)
+            logger.exception(
+                "create_task task-type creation API request failed",
+                extra={
+                    "request_id": context.request_id,
+                    "conversation_id": context.conversation_id,
+                    "company_id": context.company_id,
+                    "title": title,
+                    "latency_ms": latency_ms,
+                    "url": url,
+                    "method": "POST",
+                    "request_payload": payload,
+                },
+            )
+            return {
+                "success": False,
+                "message": "Failed to create task.",
+                "error": str(exc),
+            }
+
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = {"raw_response": response.text}
+
+        latency_ms = round((perf_counter() - start_time) * 1000, 2)
+
+        if response.is_success:
+            logger.info(
+                "create_task task-type creation API completed",
+                extra={
+                    "request_id": context.request_id,
+                    "conversation_id": context.conversation_id,
+                    "company_id": context.company_id,
+                    "title": title,
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                    "task_id": response_data.get("data", {}).get("id")
+                    if isinstance(response_data, dict)
+                    else None,
+                    "url": url,
+                    "method": "POST",
+                    "request_payload": payload,
+                    "response_body": response_data,
+                },
+            )
+            return {
+                "success": True,
+                "message": "Task created successfully.",
+                "task": response_data,
+            }
+
+        logger.warning(
+            "create_task task-type creation API returned failure",
+            extra={
+                "request_id": context.request_id,
+                "conversation_id": context.conversation_id,
+                "company_id": context.company_id,
+                "title": title,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+                "url": url,
+                "method": "POST",
+                "request_payload": payload,
+                "response_body": response_data,
+            },
+        )
+        return {
+            "success": False,
+            "status_code": response.status_code,
+            "message": "Failed to create task.",
+            "details": response_data,
+        }
+
+    return create_task

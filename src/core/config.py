@@ -20,6 +20,9 @@ class Settings(BaseModel):
     create_farm_url_template: str = os.environ.get(
         "CREATE_FARM_URL_TEMPLATE", "https://agridafter.com/api/sites/{siteId}/farms"
     )
+    create_task_url: str = os.environ.get(
+        "CREATE_TASK_URL", "https://agridafter.com/api/task-types"
+    )
     api_timeout_seconds: float = float(os.environ.get("API_TIMEOUT_SECONDS", "30"))
     redis_url: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     conversation_memory_limit: int = int(os.environ.get("CONVERSATION_MEMORY_LIMIT", "12"))

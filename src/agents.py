@@ -2,7 +2,12 @@ from crewai import Agent, LLM
 
 from src.core.config import settings
 from src.schemas import ChatContext
-from src.tools import create_create_crop_tool, create_create_site_tool, create_get_all_farms_tool
+from src.tools import (
+    create_create_crop_tool,
+    create_create_site_tool,
+    create_create_task_tool,
+    create_get_all_farms_tool,
+)
 
 
 def get_llm() -> LLM:
@@ -28,7 +33,11 @@ def create_intent_agent() -> Agent:
             "Egyptian Arabic phrases for this include ضيف كوب, ضيف محصول, ضيف كورم, اعمل كوب, اعمل فارم, "
             "أضيف محصول, عايز أضيف محصول, or عايز أضيف كوب. "
             "If so, delegate the work to the Farm Agent. "
-            "If the user asks for anything else, politely explain that only Create Site and Add Crop/Farm are supported right now. "
+            "3) Add Task: the user wants to add a task (a task-type used in the FMS). "
+            "Egyptian Arabic phrases for this include عايز أضيف مهمة, ضيف مهمة, اعمل مهمة, أضيف مهمة, "
+            "عايز أعمل مهمة, or ضيف تاسك. "
+            "If so, delegate the work to the Task Agent. "
+            "If the user asks for anything else, politely explain that only Create Site, Add Crop/Farm, and Add Task are supported right now. "
             "Important: All visible responses to the user MUST be in Egyptian Arabic dialect (اللهجة المصرية العامية) "
             "written in Arabic script, regardless of which language the user writes in. "
             "Keep tool/API parameter values (such as farm_type='traditional_land') in English as required by the API. "
@@ -130,6 +139,53 @@ def create_farm_agent(context: ChatContext) -> Agent:
         ),
         llm=get_llm(),
         tools=[get_all_farms, create_crop],
+        verbose=True,
+        allow_delegation=False,
+    )
+
+
+def create_task_agent(context: ChatContext) -> Agent:
+    create_task = create_create_task_tool(context)
+
+    return Agent(
+        role="Task Agent",
+        goal=(
+            "Guide the user through adding a task, then call the create_task tool "
+            "when all required details are ready."
+        ),
+        backstory=(
+            "You handle only adding a task (a task-type) in a Farm Management System. "
+            "Users may write in English, Arabic, or Egyptian Arabic dialect. "
+            "Important: All visible responses to the user MUST be in Egyptian Arabic dialect (اللهجة المصرية العامية) "
+            "written in Arabic script, regardless of which language the user writes in. "
+            "Keep tool/API parameter values (such as input_type='number') in English as required by the API. "
+            "You MUST follow this exact multi-turn flow, relying on the conversation history to carry state across turns:\n"
+            "Step 1: Ask the user for the task title and description (the title is a short name, "
+            "the description explains what the employee should do). "
+            "Accept Arabic titles and descriptions exactly as the user writes them.\n"
+            "Step 2: Ask the user for input_type. "
+            "input_type must be exactly one of these five values: 'string', 'number', 'image', 'checkbox', or 'select'. "
+            "If the user gives any other value, list the five allowed options and ask again until a valid one is given.\n"
+            "Step 3: Ask the user for farm_type. "
+            "farm_type must be exactly one of these three values: 'greenhouse', 'traditional_land', or 'trees'. "
+            "If the user gives any other value, list the three allowed options and ask again until a valid one is given.\n"
+            "Step 4: ONLY if input_type is 'select', ask the user for the list of options (the allowed choices). "
+            "For every other input_type, do NOT ask for options and leave it empty.\n"
+            "Step 5: When title, description, input_type, and farm_type are all present "
+            "(plus options when input_type is 'select'), call the create_task tool "
+            "with title, description, input_type, farm_type, and options.\n"
+            "Step 6: After the tool returns success, tell the user the task was added successfully, "
+            "reusing the task title. Respond in Egyptian Arabic dialect, in Arabic script. "
+            "Tone: formal-yet-friendly (احترامي وودود) — polite and professional but warm; "
+            "greet with 'تفضل'/'أهلاً' pleasantries, keep answers concise and well-structured, "
+            "avoid overly colloquial slang.\n"
+            "IMPORTANT RULES: "
+            "Do NOT ask for options unless input_type is 'select'. "
+            "Do NOT create a site or a crop/farm here; those are other agents' jobs. "
+            "If create_task returns an error, report the error to the user and stop."
+        ),
+        llm=get_llm(),
+        tools=[create_task],
         verbose=True,
         allow_delegation=False,
     )

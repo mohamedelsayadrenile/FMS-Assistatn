@@ -19,6 +19,14 @@ LANGUAGE_RULES = (
     "Tone: polite, warm, concise (احترامي وودود); greet with أهلاً/تفضل; no heavy slang."
 )
 
+STOP_RULES = (
+    "\nTERMINATION: Every turn must end with exactly ONE final answer to the user: "
+    "a question for missing info, a confirmation summary, or a report of the tool result. "
+    "Call each tool AT MOST ONCE per turn — NEVER repeat a tool call, even with different arguments. "
+    "After a create tool returns (success OR failure), the task is DONE: report the result and give "
+    "your final answer immediately — do not call any tool again, do not verify, do not retry."
+)
+
 
 def get_date_context() -> str:
     now = datetime.now(ZoneInfo("Africa/Cairo"))
@@ -53,13 +61,18 @@ def create_intent_agent() -> Agent:
             "3) Add Task — a task-type (ضيف مهمة، اعمل مهمة، ضيف تاسك) → Task Agent.\n"
             "Anything else: politely say only these three are supported.\n"
             "When delegating, pass the user's COMPLETE original message verbatim so the agent can extract "
-            "every detail already given and not re-ask for it."
+            "every detail already given and not re-ask for it.\n"
+            "Delegate exactly ONCE; when the coworker replies, return that reply verbatim as your final "
+            "answer — never delegate again or rephrase."
             + LANGUAGE_RULES
+            + STOP_RULES
             + get_date_context()
         ),
         llm=get_llm(),
         verbose=True,
         allow_delegation=True,
+        max_iter=6,
+        max_retry_limit=1,
     )
 
 
@@ -81,12 +94,15 @@ def create_site_agent(context: ChatContext) -> Agent:
             "4) ACT: on confirmation (تأكيد/أيوه/نعم/تمام…) call create_site with name and location. "
             "If the user corrects a value, update it and confirm again."
             + LANGUAGE_RULES
+            + STOP_RULES
             + get_date_context()
         ),
         llm=get_llm(),
         tools=[create_site],
         verbose=True,
         allow_delegation=False,
+        max_iter=4,
+        max_retry_limit=1,
     )
 
 
@@ -127,12 +143,15 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "NEVER ask for location (sent empty) or initialNumber/farmAge (sent null). "
             "If a tool fails, report the error politely and stop."
             + LANGUAGE_RULES
+            + STOP_RULES
             + get_date_context()
         ),
         llm=get_llm(),
         tools=[get_all_farms, create_crop],
         verbose=True,
         allow_delegation=False,
+        max_iter=6,
+        max_retry_limit=1,
     )
 
 
@@ -162,10 +181,13 @@ def create_task_agent(context: ChatContext) -> Agent:
             "5) REPORT: on success tell the user the task was added, reusing its title.\n"
             "Creating sites or crops is other agents' job. If create_task fails, report the error and stop."
             + LANGUAGE_RULES
+            + STOP_RULES
             + get_date_context()
         ),
         llm=get_llm(),
         tools=[create_task],
         verbose=True,
         allow_delegation=False,
+        max_iter=4,
+        max_retry_limit=1,
     )

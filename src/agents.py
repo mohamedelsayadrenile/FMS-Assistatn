@@ -1,3 +1,6 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from crewai import Agent, LLM
 
 from src.core.config import settings
@@ -8,6 +11,29 @@ from src.tools import (
     create_create_task_tool,
     create_get_all_farms_tool,
 )
+
+
+def get_date_context() -> str:
+    now = datetime.now(ZoneInfo("Africa/Cairo"))
+    weekday_ar = ["الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت", "الحد"][
+        now.weekday()
+    ]
+    return (
+        f"\nDATE AWARENESS: Today is {now.strftime('%A')} ({weekday_ar}) "
+        f"{now.strftime('%Y-%m-%d')} in the Africa/Cairo timezone. "
+        "Users express dates in natural language (Arabic or English), e.g. "
+        "'امبارح' (yesterday), 'الأسبوع اللي فات' (last week), "
+        "'بداية الشهر' (start of this month), 'من ٣ أيام' (3 days ago). "
+        "YOU must resolve such expressions into concrete ISO dates (YYYY-MM-DD) "
+        "yourself, relative to today's date above. Interpret 'بداية الأسبوع اللي فات' "
+        "as the Saturday that started the previous week (weeks start on Saturday in Egypt). "
+        "NEVER ask the user to provide a date in ISO or any specific format — accept "
+        "natural-language dates and convert them silently. Only ask about a date if the "
+        "user gave no date at all, and even then ask in plain everyday language "
+        "(e.g. 'زرعته امتى تقريبًا؟'), never mentioning formats. "
+        "If a resolved date is ambiguous, include your interpretation in the "
+        "confirmation summary (as YYYY-MM-DD) so the user can correct it."
+    )
 
 
 def get_llm() -> LLM:
@@ -46,6 +72,7 @@ def create_intent_agent() -> Agent:
             "Tone: Use a formal-yet-friendly tone (احترامي وودود) — be polite and professional, but warm and approachable. "
             "Greet the user with 'أهلاً'/'تفضل' style pleasantries, yet keep answers concise and well-structured. "
             "Avoid overly colloquial slang; keep it dignified and helpful."
+            + get_date_context()
         ),
         llm=get_llm(),
         verbose=True,
@@ -84,6 +111,7 @@ def create_site_agent(context: ChatContext) -> Agent:
             "Tone: Use a formal-yet-friendly tone (احترامي وودود) — polite and professional, but warm and approachable. "
             "Greet with 'تفضل'/'أهلاً' style pleasantries, yet keep answers concise and well-structured. "
             "Avoid overly colloquial slang; keep it dignified and helpful."
+            + get_date_context()
         ),
         llm=get_llm(),
         tools=[create_site],
@@ -126,8 +154,9 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "Step 3 (ASK ONCE FOR WHAT'S MISSING): Collect the remaining required parameters for the chosen farm_type. "
             "Always need farm_name (display name of the new crop/farm). "
             "For 'traditional_land' or 'greenhouse' you need: crop_type (e.g. 'Sweet corn'), "
-            "sowing_date as an ISO date (e.g. '2026-06-01'), area value (a numeric string) and area unit (e.g. 'feddan'). "
-            "For 'trees' you need: tree_species (e.g. 'Orange'), planting_date as an ISO date (e.g. '2026-07-09'), "
+            "sowing_date (an ISO date like '2026-06-01' that YOU resolve from the user's natural-language wording — "
+            "see DATE AWARENESS below), area value (a numeric string) and area unit (e.g. 'feddan'). "
+            "For 'trees' you need: tree_species (e.g. 'Orange'), planting_date (an ISO date YOU resolve the same way), "
             "number_of_trees (the number of trees), area value (a numeric string) and area unit (e.g. 'hectares'). "
             "If farm_type is missing or invalid, include it in your question and list the three allowed options "
             "(traditional_land, greenhouse, trees). Ask for ALL missing parameters together in ONE concise message — "
@@ -157,6 +186,7 @@ def create_farm_agent(context: ChatContext) -> Agent:
             "Do NOT create a top-level site here; that is the Site Agent's job. "
             "If the get_all_farms tool fails, tell the user politely and stop. "
             "If create_crop returns an error, report the error to the user and stop."
+            + get_date_context()
         ),
         llm=get_llm(),
         tools=[get_all_farms, create_crop],
@@ -212,6 +242,7 @@ def create_task_agent(context: ChatContext) -> Agent:
             "Do NOT ask for options unless input_type is 'select'. "
             "Do NOT create a site or a crop/farm here; those are other agents' jobs. "
             "If create_task returns an error, report the error to the user and stop."
+            + get_date_context()
         ),
         llm=get_llm(),
         tools=[create_task],

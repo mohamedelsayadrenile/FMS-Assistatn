@@ -48,33 +48,6 @@ class RedisMemory:
         )
         return messages
 
-    async def add_message(self, conversation_id: str, role: MessageRole, content: str) -> None:
-        message = self._build_message(role, content)
-        key = self._conversation_key(conversation_id)
-
-        try:
-            async with self.redis.pipeline(transaction=True) as pipe:
-                pipe.rpush(key, message.model_dump_json())
-                pipe.ltrim(key, -self.message_limit, -1)
-                pipe.expire(key, self.ttl_seconds)
-                await pipe.execute()
-        except Exception:
-            logger.exception(
-                "Failed to save conversation memory message",
-                extra={"conversation_id": conversation_id, "role": role},
-            )
-            raise
-
-        logger.info(
-            "Conversation memory message saved",
-            extra={
-                "conversation_id": conversation_id,
-                "role": role,
-                "message_limit": self.message_limit,
-                "ttl_seconds": self.ttl_seconds,
-            },
-        )
-
     async def add_exchange(self, conversation_id: str, user_message: str, assistant_message: str) -> None:
         key = self._conversation_key(conversation_id)
         user_memory = self._build_message("user", user_message)

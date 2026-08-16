@@ -1,6 +1,6 @@
 import logging
 from time import perf_counter
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 from crewai.tools import tool
@@ -10,6 +10,87 @@ from src.schemas import ChatContext
 
 
 logger = logging.getLogger(__name__)
+
+FARM_TYPES = ("traditional_land", "greenhouse", "trees")
+INPUT_TYPES = ("string", "number", "image", "checkbox", "select")
+
+# Tool results are read by the agent, never by the user, so they carry the recovery
+# instruction with them instead of an error the agent might echo verbatim.
+FAILURE_MESSAGE = (
+    "The request did not go through. Apologise to the user briefly in Egyptian Arabic and ask "
+    "them to try again in a moment. Never show this text, any error detail, or any status code."
+)
+
+
+def rejected_message(what: str) -> str:
+    return (
+        f"Unrecognised {what}. Ask the user again in Egyptian Arabic, offering the choices by "
+        "their Arabic names. Never show this text or any English value."
+    )
+
+
+class ApiResult(NamedTuple):
+    ok: bool
+    data: Any
+
+
+async def api_call(
+    context: ChatContext,
+    tool_name: str,
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+) -> ApiResult:
+    """Call an FMS endpoint, log the full exchange, and report only success plus body."""
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"JWT {context.jwt}",
+    }
+    log_context: dict[str, Any] = {
+        "request_id": context.request_id,
+        "conversation_id": context.conversation_id,
+        "company_id": context.company_id,
+        "url": url,
+        "method": method,
+    }
+    if payload is not None:
+        log_context["request_payload"] = payload
+
+    logger.info(f"{tool_name} API call started", extra=log_context)
+    start_time = perf_counter()
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
+            response = await client.request(method, url, json=payload, headers=headers)
+    except httpx.HTTPError:
+        logger.exception(
+            f"{tool_name} API call request failed",
+            extra={**log_context, "latency_ms": _latency_ms(start_time)},
+        )
+        return ApiResult(False, None)
+
+    try:
+        response_data = response.json()
+    except ValueError:
+        response_data = {"raw_response": response.text}
+
+    log_context |= {
+        "latency_ms": _latency_ms(start_time),
+        "status_code": response.status_code,
+        "response_body": response_data,
+    }
+
+    if response.is_success:
+        logger.info(f"{tool_name} API call completed", extra=log_context)
+        return ApiResult(True, response_data)
+
+    logger.warning(f"{tool_name} API call returned failure", extra=log_context)
+    return ApiResult(False, response_data)
+
+
+def _latency_ms(start_time: float) -> float:
+    return round((perf_counter() - start_time) * 1000, 2)
 
 
 def create_create_site_tool(context: ChatContext) -> Any:
@@ -23,108 +104,17 @@ def create_create_site_tool(context: ChatContext) -> Any:
             "timezone": settings.default_timezone,
             "managerIds": context.manager_ids,
         }
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"JWT {context.jwt}",
-        }
-
-        logger.info(
-            "create_site tool started site creation API call",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "site_name": name,
-                "site_location": location,
-                "timezone": settings.default_timezone,
-                "manager_count": len(context.manager_ids),
-                "url": settings.create_site_url,
-                "method": "POST",
-                "request_payload": payload,
-            },
+        result = await api_call(
+            context, "create_site", "POST", settings.create_site_url, payload
         )
-        start_time = perf_counter()
+        if not result.ok:
+            return {"success": False, "message": FAILURE_MESSAGE}
 
-        try:
-            async with httpx.AsyncClient(
-                timeout=settings.create_site_timeout_seconds
-            ) as client:
-                response = await client.post(
-                    settings.create_site_url,
-                    json=payload,
-                    headers=headers,
-                )
-        except httpx.HTTPError as exc:
-            latency_ms = round((perf_counter() - start_time) * 1000, 2)
-            logger.exception(
-                "create_site site creation API request failed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "latency_ms": latency_ms,
-                    "url": settings.create_site_url,
-                    "method": "POST",
-                    "request_payload": payload,
-                },
-            )
-            return {
-                "success": False,
-                "message": "Failed to create site.",
-                "error": str(exc),
-            }
-
-        try:
-            response_data = response.json()
-        except ValueError:
-            response_data = {"raw_response": response.text}
-
-        latency_ms = round((perf_counter() - start_time) * 1000, 2)
-
-        if response.is_success:
-            logger.info(
-                "create_site site creation API completed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                    "site_id": response_data.get("id"),
-                    "site_name": response_data.get("name"),
-                    "url": settings.create_site_url,
-                    "method": "POST",
-                    "request_payload": payload,
-                    "response_body": response_data,
-                },
-            )
-            return {
-                "success": True,
-                "site_id": response_data.get("id"),
-                "message": "Site created successfully.",
-                "site": response_data,
-            }
-
-        logger.warning(
-            "create_site site creation API returned failure",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "status_code": response.status_code,
-                "latency_ms": latency_ms,
-                "url": settings.create_site_url,
-                "method": "POST",
-                "request_payload": payload,
-                "response_body": response_data,
-            },
-        )
+        site_id = result.data.get("id") if isinstance(result.data, dict) else None
         return {
-            "success": False,
-            "status_code": response.status_code,
-            "message": "Failed to create site.",
-            "details": response_data,
+            "success": True,
+            "site_id": site_id,
+            "message": "Site created successfully.",
         }
 
     return create_site
@@ -134,107 +124,25 @@ def create_get_all_farms_tool(context: ChatContext) -> Any:
     @tool("get_all_farms")
     async def get_all_farms() -> dict[str, Any]:
         """List all the user's sites in the FMS, each with a number, id, name, location, and type."""
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"JWT {context.jwt}",
-        }
-        url = settings.get_sites_url
+        result = await api_call(context, "get_all_farms", "GET", settings.get_sites_url)
+        if not result.ok:
+            return {"success": False, "message": FAILURE_MESSAGE}
 
-        logger.info(
-            "get_all_farms tool started sites listing API call",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "url": url,
-                "method": "GET",
-            },
-        )
-        start_time = perf_counter()
-
-        try:
-            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
-                response = await client.get(
-                    url,
-                    headers=headers,
-                )
-        except httpx.HTTPError as exc:
-            latency_ms = round((perf_counter() - start_time) * 1000, 2)
-            logger.exception(
-                "get_all_farms sites listing API request failed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "latency_ms": latency_ms,
-                    "url": url,
-                    "method": "GET",
-                },
-            )
-            return {
-                "success": False,
-                "message": "Failed to list sites.",
-                "error": str(exc),
+        sites = result.data if isinstance(result.data, list) else []
+        numbered_sites = [
+            {
+                "number": index + 1,
+                "id": site.get("id"),
+                "name": site.get("name"),
+                "location": site.get("location"),
+                "type": site.get("type"),
             }
-
-        try:
-            response_data = response.json()
-        except ValueError:
-            response_data = {"raw_response": response.text}
-
-        latency_ms = round((perf_counter() - start_time) * 1000, 2)
-
-        if response.is_success:
-            sites = response_data if isinstance(response_data, list) else []
-            numbered_sites = [
-                {
-                    "number": index + 1,
-                    "id": site.get("id"),
-                    "name": site.get("name"),
-                    "location": site.get("location"),
-                    "type": site.get("type"),
-                }
-                for index, site in enumerate(sites)
-            ]
-            logger.info(
-                "get_all_farms sites listing API completed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                    "site_count": len(numbered_sites),
-                    "url": url,
-                    "method": "GET",
-                    "response_body": response_data,
-                },
-            )
-            return {
-                "success": True,
-                "sites": numbered_sites,
-                "message": f"Found {len(numbered_sites)} site(s).",
-            }
-
-        logger.warning(
-            "get_all_farms sites listing API returned failure",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "status_code": response.status_code,
-                "latency_ms": latency_ms,
-                "url": url,
-                "method": "GET",
-                "response_body": response_data,
-            },
-        )
+            for index, site in enumerate(sites)
+        ]
         return {
-            "success": False,
-            "status_code": response.status_code,
-            "message": "Failed to list sites.",
-            "details": response_data,
+            "success": True,
+            "sites": numbered_sites,
+            "message": f"Found {len(numbered_sites)} site(s).",
         }
 
     return get_all_farms
@@ -259,23 +167,17 @@ def create_create_crop_tool(context: ChatContext) -> Any:
             {"tree_species": "<str>", "planting_date": "<ISO date>",
              "number_of_trees": <int or str>, "area": {"value": "<str>", "unit": "<str>"}}
         """
-        if farm_type not in ("traditional_land", "greenhouse", "trees"):
-            message = (
-                f"Invalid farm_type '{farm_type}'. "
-                "Allowed values: traditional_land, greenhouse, trees."
-            )
+        if farm_type not in FARM_TYPES:
             logger.warning(
                 "create_crop tool rejected invalid farm_type",
                 extra={
                     "request_id": context.request_id,
                     "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "site_id": site_id,
                     "farm_name": farm_name,
                     "farm_type": farm_type,
                 },
             )
-            return {"success": False, "message": message}
+            return {"success": False, "message": rejected_message("farm kind")}
 
         payload = {
             "farm_name": farm_name,
@@ -285,109 +187,15 @@ def create_create_crop_tool(context: ChatContext) -> Any:
             "initialNumber": "null",
             "farmAge": "null",
         }
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"JWT {context.jwt}",
-        }
         url = settings.create_farm_url_template.format(siteId=site_id)
+        result = await api_call(context, "create_crop", "POST", url, payload)
+        if not result.ok:
+            return {"success": False, "message": FAILURE_MESSAGE}
 
-        logger.info(
-            "create_crop tool started farm creation API call",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "site_id": site_id,
-                "farm_name": farm_name,
-                "farm_type": farm_type,
-                "url": url,
-                "method": "POST",
-                "request_payload": payload,
-            },
-        )
-        start_time = perf_counter()
-
-        try:
-            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                )
-        except httpx.HTTPError as exc:
-            latency_ms = round((perf_counter() - start_time) * 1000, 2)
-            logger.exception(
-                "create_crop farm creation API request failed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "site_id": site_id,
-                    "latency_ms": latency_ms,
-                    "url": url,
-                    "method": "POST",
-                    "request_payload": payload,
-                },
-            )
-            return {
-                "success": False,
-                "message": "Failed to create crop/farm.",
-                "error": str(exc),
-            }
-
-        try:
-            response_data = response.json()
-        except ValueError:
-            response_data = {"raw_response": response.text}
-
-        latency_ms = round((perf_counter() - start_time) * 1000, 2)
-
-        if response.is_success:
-            logger.info(
-                "create_crop farm creation API completed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "site_id": site_id,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                    "farm_id": response_data.get("farm", {}).get("id")
-                    if isinstance(response_data, dict)
-                    else None,
-                    "url": url,
-                    "method": "POST",
-                    "request_payload": payload,
-                    "response_body": response_data,
-                },
-            )
-            return {
-                "success": True,
-                "message": "Farm created successfully.",
-                "farm": response_data,
-            }
-
-        logger.warning(
-            "create_crop farm creation API returned failure",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "site_id": site_id,
-                "status_code": response.status_code,
-                "latency_ms": latency_ms,
-                "url": url,
-                "method": "POST",
-                "request_payload": payload,
-                "response_body": response_data,
-            },
-        )
         return {
-            "success": False,
-            "status_code": response.status_code,
-            "message": "Failed to create crop/farm.",
-            "details": response_data,
+            "success": True,
+            "farm_name": farm_name,
+            "message": "Farm created successfully.",
         }
 
     return create_crop
@@ -409,41 +217,29 @@ def create_create_task_tool(context: ChatContext) -> Any:
         options is a list of choice strings and is only required when input_type is
         "select"; it is ignored for all other input types.
         """
-        if input_type not in ("string", "number", "image", "checkbox", "select"):
-            message = (
-                f"Invalid input_type '{input_type}'. "
-                "Allowed values: string, number, image, checkbox, select."
-            )
+        if input_type not in INPUT_TYPES:
             logger.warning(
                 "create_task tool rejected invalid input_type",
                 extra={
                     "request_id": context.request_id,
                     "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
                     "title": title,
                     "input_type": input_type,
-                    "farm_type": farm_type,
                 },
             )
-            return {"success": False, "message": message}
+            return {"success": False, "message": rejected_message("answer kind")}
 
-        if farm_type not in ("greenhouse", "traditional_land", "trees"):
-            message = (
-                f"Invalid farm_type '{farm_type}'. "
-                "Allowed values: greenhouse, traditional_land, trees."
-            )
+        if farm_type not in FARM_TYPES:
             logger.warning(
                 "create_task tool rejected invalid farm_type",
                 extra={
                     "request_id": context.request_id,
                     "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
                     "title": title,
-                    "input_type": input_type,
                     "farm_type": farm_type,
                 },
             )
-            return {"success": False, "message": message}
+            return {"success": False, "message": rejected_message("farm kind")}
 
         payload = {
             "title": title,
@@ -452,109 +248,12 @@ def create_create_task_tool(context: ChatContext) -> Any:
             "farm_type": farm_type,
             "input_config": {"options": options or [""]},
         }
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"JWT {context.jwt}",
-        }
-        url = settings.create_task_url
-
-        logger.info(
-            "create_task tool started task-type creation API call",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "title": title,
-                "input_type": input_type,
-                "farm_type": farm_type,
-                "url": url,
-                "method": "POST",
-                "request_payload": payload,
-            },
+        result = await api_call(
+            context, "create_task", "POST", settings.create_task_url, payload
         )
-        start_time = perf_counter()
+        if not result.ok:
+            return {"success": False, "message": FAILURE_MESSAGE}
 
-        try:
-            async with httpx.AsyncClient(timeout=settings.api_timeout_seconds) as client:
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                )
-        except httpx.HTTPError as exc:
-            latency_ms = round((perf_counter() - start_time) * 1000, 2)
-            logger.exception(
-                "create_task task-type creation API request failed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "title": title,
-                    "latency_ms": latency_ms,
-                    "url": url,
-                    "method": "POST",
-                    "request_payload": payload,
-                },
-            )
-            return {
-                "success": False,
-                "message": "Failed to create task.",
-                "error": str(exc),
-            }
-
-        try:
-            response_data = response.json()
-        except ValueError:
-            response_data = {"raw_response": response.text}
-
-        latency_ms = round((perf_counter() - start_time) * 1000, 2)
-
-        if response.is_success:
-            logger.info(
-                "create_task task-type creation API completed",
-                extra={
-                    "request_id": context.request_id,
-                    "conversation_id": context.conversation_id,
-                    "company_id": context.company_id,
-                    "title": title,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                    "task_id": response_data.get("data", {}).get("id")
-                    if isinstance(response_data, dict)
-                    else None,
-                    "url": url,
-                    "method": "POST",
-                    "request_payload": payload,
-                    "response_body": response_data,
-                },
-            )
-            return {
-                "success": True,
-                "message": "Task created successfully.",
-                "task": response_data,
-            }
-
-        logger.warning(
-            "create_task task-type creation API returned failure",
-            extra={
-                "request_id": context.request_id,
-                "conversation_id": context.conversation_id,
-                "company_id": context.company_id,
-                "title": title,
-                "status_code": response.status_code,
-                "latency_ms": latency_ms,
-                "url": url,
-                "method": "POST",
-                "request_payload": payload,
-                "response_body": response_data,
-            },
-        )
-        return {
-            "success": False,
-            "status_code": response.status_code,
-            "message": "Failed to create task.",
-            "details": response_data,
-        }
+        return {"success": True, "title": title, "message": "Task created successfully."}
 
     return create_task

@@ -45,7 +45,6 @@ async def run_fms_assistant(user_message: str, context: ChatContext, conversatio
         result = await crew.akickoff(
             inputs={
                 "user_message": user_message,
-                "conversation_id": context.conversation_id,
                 "conversation_history": conversation_history,
             }
         )

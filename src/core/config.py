@@ -13,7 +13,6 @@ class Settings(BaseSettings):
 
     create_site_url: str
     default_timezone: str
-    create_site_timeout_seconds: float
 
     get_sites_url: str
     create_farm_url_template: str
